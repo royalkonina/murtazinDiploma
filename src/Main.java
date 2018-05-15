@@ -41,33 +41,54 @@ public class Main {
         File resultsDirectory = new File("src/resources/cleared_images");
         File[] sources = Objects.requireNonNull(sourcesDirectory.listFiles());
         File[] results = Objects.requireNonNull(resultsDirectory.listFiles());
-        double sum = 0;
+        double sumGOOD = 0;
+        double sumTRUEobject = 0;
+        double sumTRUEbackground = 0;
+        double sumGOODfiltered = 0;
+        double sumTRUEobjectfiltered = 0;
+        double sumTRUEbackgroundfiltered = 0;
+        int countNotFiltered = 0;
         for (int i = 0; i < sources.length; i++) {
             BufferedImage imageSource = ImageIO.read(sources[i]);
             BufferedImage imageResult = ImageIO.read(results[i]);
             int[][] binaryImageSource = getBinaryImage(imageSource);
             int[][] binaryImageResult = getBinaryImage(imageResult);
             int countTrueObjectPixels = getCountTrueObjectPixels(binaryImageSource, binaryImageResult);
-            int countFalseObjectPixels = getCountFalseObjectPixels(binaryImageSource, binaryImageResult);
-            int countBadPixels = getCountBadPixels(binaryImageSource, binaryImageResult);
+            int countTrueBackgroundPixels = getCountTrueBackgroundPixels(binaryImageSource, binaryImageResult);
             int countGoodPixels = getCountGoodPixels(binaryImageSource, binaryImageResult);
             int objectSize = getObjectSize(binaryImageSource);
-            double ratioGOOD = (countGoodPixels + .0) / (imageResult.getWidth() * imageResult.getHeight());
-            double ratioBAD = (countBadPixels + .0) / (imageResult.getWidth() * imageResult.getHeight());
-            sum += ratioGOOD;
-            System.out.println(String.format("Error: Image %s GOOD = %d, BAD = %d, ratioGOOD = %f, ratioBAD = %f",
-                    sources[i].getName(), countTrueObjectPixels, countFalseObjectPixels, ratioGOOD, ratioBAD));
+            int imageSize = imageResult.getWidth() * imageResult.getHeight();
+            double ratioGOOD = (countGoodPixels + .0) / imageSize;
+            double ratioTRUEobject = (countTrueObjectPixels + .0) / objectSize;
+            double ratioTRUEbackground = (countTrueBackgroundPixels + .0) / (imageSize - objectSize);
+            sumGOOD += ratioGOOD;
+            sumTRUEobject += ratioTRUEobject;
+            sumTRUEbackground += ratioTRUEbackground;
+            if(ratioTRUEobject > 0.5){
+                countNotFiltered++;
+                sumGOODfiltered += ratioGOOD;
+                sumTRUEobjectfiltered += ratioTRUEobject;
+                sumTRUEbackgroundfiltered += ratioTRUEbackground;
+            }
+            System.out.println(String.format("Error: Image %s ratioGOOD = %f, ratioTRUEobject = %f, ratioTRUEbackground = %f",
+                    sources[i].getName(), ratioGOOD, ratioTRUEobject, ratioTRUEbackground));
         }
-        System.out.println("Среднее значение ошибки: " + ( 1.0 - sum / sources.length));
+        System.out.println("Среднее значение ошибки изображения: " + (1.0 - sumGOOD / sources.length));
+        System.out.println("Среднее значение ошибки объекта: " + (1.0 - sumTRUEobject / sources.length));
+        System.out.println("Среднее значение ошибки фона: " + (1.0 - sumTRUEbackground / sources.length));
+        System.out.println("Из 100 изображений осталось: " + countNotFiltered);
+        System.out.println("Отфильтрованное Среднее значение ошибки изображения: " + (1.0 - sumGOODfiltered / countNotFiltered));
+        System.out.println("Отфильтрованное Среднее значение ошибки объекта: " + (1.0 - sumTRUEobjectfiltered / countNotFiltered));
+        System.out.println("Отфильтрованное Среднее значение ошибки фона: " + (1.0 - sumTRUEbackgroundfiltered / countNotFiltered));
     }
 
-    private static int getCountBadPixels(int[][] imageSource, int[][] imageResult) {
+    private static int getCountTrueBackgroundPixels(int[][] imageSource, int[][] imageResult) {
         int count = 0;
         int width = imageSource.length;
         int height = imageSource[0].length;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-                if (imageSource[x][y] != imageResult[x][y]) {
+                if (imageSource[x][y] == 0 &&  imageResult[x][y] == 0) {
                     count++;
                 }
             }
@@ -116,21 +137,6 @@ public class Main {
         }
         return count;
     }
-
-    private static int getCountFalseObjectPixels(int[][] imageSource, int[][] imageResult) {
-        int count = 0;
-        int width = imageSource.length;
-        int height = imageSource[0].length;
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                if (imageSource[x][y] == 0 && imageResult[x][y] == 1) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
 
     private static void clearColoredImages() throws IOException {
         File directory = new File("src/resources/opened_and_closed");
