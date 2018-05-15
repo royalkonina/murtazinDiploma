@@ -30,9 +30,9 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         //Generator.generate(COUNT_IMAGES_TO_GENERATE);
-        //divideIntoClusters();
-        //makeSomeOpeningAndClosing();
-        //clearColoredImages();
+        divideIntoClusters();
+        makeSomeOpeningAndClosing();
+        clearColoredImages();
         calculateError();
     }
 
@@ -64,7 +64,7 @@ public class Main {
             sumGOOD += ratioGOOD;
             sumTRUEobject += ratioTRUEobject;
             sumTRUEbackground += ratioTRUEbackground;
-            if(ratioTRUEobject > 0.5){
+            if (ratioTRUEobject > 0.5) {
                 countNotFiltered++;
                 sumGOODfiltered += ratioGOOD;
                 sumTRUEobjectfiltered += ratioTRUEobject;
@@ -88,7 +88,7 @@ public class Main {
         int height = imageSource[0].length;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-                if (imageSource[x][y] == 0 &&  imageResult[x][y] == 0) {
+                if (imageSource[x][y] == 0 && imageResult[x][y] == 0) {
                     count++;
                 }
             }
@@ -294,6 +294,7 @@ public class Main {
             BufferedImage image = ImageIO.read(file);
             int[][] grayImage = getGrayImage(image);
             double[][][] correlation = calcCorrelation(grayImage);
+            correlation = doStandardScore(correlation);
             double[][] points = getPointsForKMeans(correlation);
             double[][] centroids = getCentroids(correlation);
             EKmeans eKmeans = new EKmeans(centroids, points);
@@ -303,6 +304,35 @@ public class Main {
             Utils.writeImageToFile(result, "src/resources/divided_into_clusters/" + file.getName());
             System.out.println("Dividing into clusters: Image " + file.getName() + " done");
         }
+    }
+
+    private static double[][][] doStandardScore(double[][][] correlation) {
+        int width = correlation.length;
+        int height = correlation[0].length;
+        double[][][] result = new double[width][height][dx.length];
+        for (int i = 0; i < dx.length; i++) {
+            double meanValue = 0;
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    meanValue += correlation[x][y][i];
+                }
+            }
+            meanValue /= width * height;
+
+            double deviation = 0;
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    deviation += Math.pow((meanValue - correlation[x][y][i]), 2);
+                }
+            }
+            deviation = Math.sqrt(deviation / (width * height));
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    result[x][y][i] = (correlation[x][y][i] - meanValue) / deviation;
+                }
+            }
+        }
+        return result;
     }
 
     private static int[][] getBinaryImage(int width, int height, int[] assigments) {
