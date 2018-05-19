@@ -16,17 +16,14 @@ import static utils.Utils.Pair;
 public class Main {
 
     public static final int WINDOW_SIZE = 9;
-    public static final int MEAN_VALUE = 127;
     public static final int NUMBER_OF_CLUSTERS = 2;
-    public static final int[][] WINDOW = new int[WINDOW_SIZE][WINDOW_SIZE];
+    public static final int M = 6;
+    public static final Color[] COLORS = {Color.RED, Color.GREEN};
     private static final int COUNT_IMAGES_TO_GENERATE = 100;
     private static int[] dx = {0, 1, 1, 1};
     private static int[] dy = {1, 0, 1, -1};
     private static int[] dx_bfs = {0, 0, 1, -1};
     private static int[] dy_bfs = {1, -1, 0, 0};
-    private static double MIN_VALUE = -10000;
-    public static final Color[] COLORS = {Color.RED, Color.GREEN};
-
 
     public static void main(String[] args) throws IOException {
         //Generator.generate(COUNT_IMAGES_TO_GENERATE);
@@ -309,8 +306,8 @@ public class Main {
     private static double[][][] doStandardScore(double[][][] correlation) {
         int width = correlation.length;
         int height = correlation[0].length;
-        double[][][] result = new double[width][height][dx.length];
-        for (int i = 0; i < dx.length; i++) {
+        double[][][] result = new double[width][height][M];
+        for (int i = 0; i < M; i++) {
             double meanValue = 0;
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
@@ -368,12 +365,12 @@ public class Main {
     }
 
     private static double[][] getCentroids(double[][][] correlation) {
-        double[][] result = new double[NUMBER_OF_CLUSTERS][dx.length];
+        double[][] result = new double[NUMBER_OF_CLUSTERS][M];
         int delta = WINDOW_SIZE + 1;
         int width = correlation.length;
         int height = correlation[0].length;
         for (int i = 0; i < NUMBER_OF_CLUSTERS; i++) {
-            for (int j = 0; j < dx.length; j++) {
+            for (int j = 0; j < M; j++) {
                 result[i][j] = correlation[delta + Utils.rnd.nextInt(width - 2 * delta)][delta + Utils.rnd.nextInt(height - 2 * delta)][j];
             }
         }
@@ -382,10 +379,10 @@ public class Main {
 
     private static double[][] getPointsForKMeans(double[][][] correlation) {
         int n = correlation.length * correlation[0].length;
-        double[][] result = new double[n][dx.length];
+        double[][] result = new double[n][M];
         for (int i = 0; i < correlation.length; i++) {
             for (int j = 0; j < correlation[0].length; j++) {
-                for (int k = 0; k < dx.length; k++) {
+                for (int k = 0; k < M; k++) {
                     result[i * correlation.length + j][k] = correlation[i][j][k];
                 }
             }
@@ -407,7 +404,7 @@ public class Main {
     private static double[][][] calcCorrelation(int[][] image) {
         int width = image.length;
         int height = image[0].length;
-        double[][][] result = new double[width][height][dx.length];
+        double[][][] result = new double[width][height][M];
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 for (int i = 0; i < dx.length; i++) {
@@ -432,16 +429,24 @@ public class Main {
                         for (int deltaY = -WINDOW_SIZE / 2; deltaY <= WINDOW_SIZE / 2; deltaY++) {
                             int newX = x + deltaX;
                             int newY = y + deltaY;
-                            if (goodCoords(newX + n, width) && goodCoords(newY + m, height) && goodCoords(newX, width) && goodCoords(newY, height)) {
-                                result[x][y][i] += (image[newX][newY] - meanValue) * (image[newX + n][newY + m] - meanValue);
-                                if (goodCoords(newX, width) && goodCoords(newY, height)) {
-                                    dispersion += (image[newX][newY] - meanValue) * (image[newX][newY] - meanValue);
-                                    countZnam++;
+                            if (goodCoords(newX, width) && goodCoords(newY, height)) {
+                                dispersion += (image[newX][newY] - meanValue) * (image[newX][newY] - meanValue);
+                                countZnam++;
+                                if (goodCoords(newX + n, width) && goodCoords(newY + m, height)) {
+                                    result[x][y][i] += (image[newX][newY] - meanValue) * (image[newX + n][newY + m] - meanValue);
+                                }
+                                if(i == 0){
+                                    result[x][y][4] += Math.pow((image[newX][newY] - meanValue), 3);
+                                    result[x][y][5] += Math.pow((image[newX][newY] - meanValue), 4);
                                 }
                             }
                         }
                     }
                     result[x][y][i] *= (countZnam + .0) / (dispersion * countChisl);
+                    if(i == 0){
+                        result[x][y][4] *= (1.0)/Math.pow(Math.sqrt(dispersion), 3);
+                        result[x][y][5] *= (1.0)/Math.pow(Math.sqrt(dispersion), 4);
+                    }
                 }
             }
         }
