@@ -15,22 +15,118 @@ import static utils.Utils.Pair;
 
 public class Main {
 
-    public static final int WINDOW_SIZE = 9;
+    public static final int WINDOW_SIZE_CLUSTERS = 31;
+    public static final int WINDOW_SIZE_OPENING = 5;
+    public static final int MASK_SIZE = 5;
     public static final int NUMBER_OF_CLUSTERS = 2;
-    public static final int M = 6;
     public static final Color[] COLORS = {Color.RED, Color.GREEN};
     private static final int COUNT_IMAGES_TO_GENERATE = 100;
     private static int[] dx = {0, 1, 1, 1};
     private static int[] dy = {1, 0, 1, -1};
+    //private static int[] dx = {1, 0};
+    //private static int[] dy = {0, 1};
     private static int[] dx_bfs = {0, 0, 1, -1};
     private static int[] dy_bfs = {1, -1, 0, 0};
+    private static int[] L5 = {1, 4, 6, 4, 1};
+    private static int[] E5 = {-1, -2, 0, 2, 1};
+    private static int[] S5 = {-1, 0, 2, 0, -1};
+    private static int[] R5 = {1, -4, 6, -4, 1};
+    private static int[][][] lawsMasks;
+    private static int[] dividersLawsMasks;
 
     public static void main(String[] args) throws IOException {
         //Generator.generate(COUNT_IMAGES_TO_GENERATE);
+        initLawsMasks();
+        //updateWithLawsMasks();
         divideIntoClusters();
         makeSomeOpeningAndClosing();
         clearColoredImages();
         calculateError();
+    }
+
+    private static void updateWithLawsMasks() throws IOException {
+        File directory = new File("src/resources/combined");
+        for (File file : Objects.requireNonNull(directory.listFiles())) {
+            BufferedImage image = ImageIO.read(file);
+            int[][] grayImage = getGrayImage(image);
+            for (int i = 0; i < lawsMasks.length; i++) {
+                int[][] grayImageAfterLaws = updateWithLawsMask(grayImage, lawsMasks[i], i);
+                Utils.writeImageToFile(getImageFromGray(grayImageAfterLaws), "src/resources/after_laws/" + i + "_" + file.getName());
+                System.out.println("Making Laws masks: Image " + file.getName() + " done");
+            }
+        }
+    }
+
+    private static BufferedImage getImageFromGray(int[][] grayImage) {
+        int width = grayImage.length;
+        int height = grayImage[0].length;
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                result.setRGB(x, y, grayImage[x][y]);
+            }
+        }
+        return result;
+    }
+
+    private static int[][] updateWithLawsMask(int[][] grayImage, int[][] lawsMask, int maskIndex) {
+        int width = grayImage.length;
+        int height = grayImage[0].length;
+        int[][] result = new int[width][height];
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                int meanValue = 0;
+                for (int deltaX = -MASK_SIZE / 2, i = 0; deltaX <= MASK_SIZE / 2; deltaX++, i++) {
+                    for (int deltaY = -MASK_SIZE / 2, j = 0; deltaY <= MASK_SIZE / 2; deltaY++, j++) {
+                        int newX = mod(x + deltaX, width);
+                        int newY = mod(y + deltaY, height);
+                        meanValue += grayImage[newX][newY];
+                    }
+                }
+                meanValue /= MASK_SIZE * MASK_SIZE;
+                for (int deltaX = -MASK_SIZE / 2, i = 0; deltaX <= MASK_SIZE / 2; deltaX++, i++) {
+                    for (int deltaY = -MASK_SIZE / 2, j = 0; deltaY <= MASK_SIZE / 2; deltaY++, j++) {
+                        int newX = mod(x + deltaX, width);
+                        int newY = mod(y + deltaY, height);
+                        result[x][y] += (grayImage[newX][newY] - meanValue) * lawsMask[i][j];
+                    }
+                }
+                result[x][y] += meanValue;
+                //result[x][y] = Math.min(Math.max(result[x][y], 0), 255);
+            }
+        }
+        return result;
+    }
+
+    private static int mod(int x, int width) {
+        return (x < 0) ? (x + width) : ((x >= width) ? (x - width) : x);
+    }
+
+    private static void initLawsMasks() {
+        int[][] lawsVectors = {L5, E5, S5, R5};
+        lawsMasks = new int[lawsVectors.length * lawsVectors.length][L5.length][L5.length];
+        dividersLawsMasks = new int[lawsVectors.length * lawsVectors.length];
+        for (int i = 0; i < lawsVectors.length; i++) {
+            for (int j = 0; j < lawsVectors.length; j++) {
+                int index = i * lawsVectors.length + j;
+                lawsMasks[index] = mult(lawsVectors[i], lawsVectors[j]);
+                for (int x = 0; x < MASK_SIZE; x++) {
+                    for (int y = 0; y < MASK_SIZE; y++) {
+                        dividersLawsMasks[index] += Math.abs(lawsMasks[index][x][y]);
+                    }
+                }
+            }
+        }
+    }
+
+    private static int[][] mult(int[] first, int[] second) {
+        int[][] result = new int[first.length][second.length];
+        for (int i = 0; i < first.length; i++) {
+            for (int j = 0; j < second.length; j++) {
+                result[i][j] = first[i] * second[j];
+            }
+        }
+        return result;
     }
 
     private static void calculateError() throws IOException {
@@ -251,7 +347,7 @@ public class Main {
             int[][] binaryImage = getBinaryImage(image);
             int[] counts = getCountOfAssigments(binaryImage);
             System.out.print(String.format("Opening: Image %s : RED= %d; GREEN = %d; RED/GREEN = %f", file.getName(), counts[0], counts[1], (counts[0] + .0) / counts[1]));
-            if (counts[0] > counts[1]) {
+            if (counts[0] < counts[1]) {
                 binaryImage = opening(binaryImage, 1);
                 binaryImage = closing(binaryImage, 1);
             } else {
@@ -290,10 +386,12 @@ public class Main {
         for (File file : Objects.requireNonNull(directory.listFiles())) {
             BufferedImage image = ImageIO.read(file);
             int[][] grayImage = getGrayImage(image);
+            double[][][] laws = getLawsMatrix(grayImage);
             double[][][] correlation = calcCorrelation(grayImage);
-            correlation = doStandardScore(correlation);
-            double[][] points = getPointsForKMeans(correlation);
-            double[][] centroids = getCentroids(correlation);
+            laws = sum(correlation, laws);
+            laws = doStandardScore(laws);
+            double[][] points = getPointsForKMeans(laws);
+            double[][] centroids = getCentroids(laws);
             EKmeans eKmeans = new EKmeans(centroids, points);
             eKmeans.run();
             int[] assigments = eKmeans.getAssignments();
@@ -303,15 +401,58 @@ public class Main {
         }
     }
 
+    private static double[][][] getLawsMatrix(int[][] grayImage) {
+        int[] indexes = {3, 7};
+        int m = indexes.length;
+        int width = grayImage.length;
+        int height = grayImage[0].length;
+        double[][][] result = new double[m][width][height];
+        for (int i = 0; i < m; i++) {
+            int[][] updatedImage = updateWithLawsMask(grayImage, lawsMasks[indexes[i]], indexes[i]);
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    result[i][x][y] = updatedImage[x][y];
+                }
+            }
+        }
+        return result;
+    }
+
+    private static double[][][] sum(double[][][] first, double[][][] second) {
+        int width = first[0].length;
+        int height = first[0][0].length;
+        int depth1 = first.length;
+        int depth2 = second.length;
+        double[][][] result = new double[depth1 + depth2][width][height];
+        for (int i = 0; i < depth1; i++) {
+            for (int j = 0; j < width; j++) {
+                for (int k = 0; k < height; k++) {
+                    result[i][j][k] = first[i][j][k];
+                }
+            }
+        }
+        for (int i = 0; i < depth2; i++) {
+            for (int j = 0; j < width; j++) {
+                for (int k = 0; k < height; k++) {
+                    result[i + depth1][j][k] = second[i][j][k];
+                }
+            }
+        }
+        return result;
+    }
+
     private static double[][][] doStandardScore(double[][][] correlation) {
-        int width = correlation.length;
-        int height = correlation[0].length;
-        double[][][] result = new double[width][height][M];
-        for (int i = 0; i < M; i++) {
+        int width = correlation[0].length;
+        int height = correlation[0][0].length;
+        double[][][] result = new double[correlation.length][width][height];
+        for (int i = 0; i < correlation.length; i++) {
             double meanValue = 0;
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    meanValue += correlation[x][y][i];
+                    meanValue += correlation[i][x][y];
+                    if(Double.isNaN(correlation[i][x][y])){
+                        System.out.println("NaN found: i=" + i + " x=" + x + " y=" + y);
+                    }
                 }
             }
             meanValue /= width * height;
@@ -319,13 +460,13 @@ public class Main {
             double deviation = 0;
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    deviation += Math.pow((meanValue - correlation[x][y][i]), 2);
+                    deviation += Math.pow((meanValue - correlation[i][x][y]), 2);
                 }
             }
             deviation = Math.sqrt(deviation / (width * height));
             for (int x = 0; x < width; x++) {
                 for (int y = 0; y < height; y++) {
-                    result[x][y][i] = (correlation[x][y][i] - meanValue) / deviation;
+                    result[i][x][y] = (correlation[i][x][y] - meanValue) / deviation;
                 }
             }
         }
@@ -365,25 +506,27 @@ public class Main {
     }
 
     private static double[][] getCentroids(double[][][] correlation) {
-        double[][] result = new double[NUMBER_OF_CLUSTERS][M];
-        int delta = WINDOW_SIZE + 1;
-        int width = correlation.length;
-        int height = correlation[0].length;
+        double[][] result = new double[NUMBER_OF_CLUSTERS][correlation.length];
+        int delta = WINDOW_SIZE_CLUSTERS + 1;
+        int width = correlation[0].length;
+        int height = correlation[0][0].length;
         for (int i = 0; i < NUMBER_OF_CLUSTERS; i++) {
-            for (int j = 0; j < M; j++) {
-                result[i][j] = correlation[delta + Utils.rnd.nextInt(width - 2 * delta)][delta + Utils.rnd.nextInt(height - 2 * delta)][j];
+            int y = delta + Utils.rnd.nextInt(height - 2 * delta);
+            int x = delta + Utils.rnd.nextInt(width - 2 * delta);
+            for (int j = 0; j < correlation.length; j++) {
+                result[i][j] = correlation[j][x][y];
             }
         }
         return result;
     }
 
     private static double[][] getPointsForKMeans(double[][][] correlation) {
-        int n = correlation.length * correlation[0].length;
-        double[][] result = new double[n][M];
+        int n = correlation[0][0].length * correlation[0].length;
+        double[][] result = new double[n][correlation.length];
         for (int i = 0; i < correlation.length; i++) {
             for (int j = 0; j < correlation[0].length; j++) {
-                for (int k = 0; k < M; k++) {
-                    result[i * correlation.length + j][k] = correlation[i][j][k];
+                for (int k = 0; k < correlation[0][0].length; k++) {
+                    result[j * correlation[0].length + k][i] = correlation[i][j][k];
                 }
             }
         }
@@ -404,7 +547,7 @@ public class Main {
     private static double[][][] calcCorrelation(int[][] image) {
         int width = image.length;
         int height = image[0].length;
-        double[][][] result = new double[width][height][M];
+        double[][][] result = new double[dx.length][width][height];
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 for (int i = 0; i < dx.length; i++) {
@@ -413,46 +556,42 @@ public class Main {
                     double meanValue = 0;
                     double dispersion = 0;
                     int countChisl = 0;
-                    for (int deltaX = -WINDOW_SIZE / 2; deltaX <= WINDOW_SIZE / 2; deltaX++) {
-                        for (int deltaY = -WINDOW_SIZE / 2; deltaY <= WINDOW_SIZE / 2; deltaY++) {
-                            int newX = x + deltaX;
-                            int newY = y + deltaY;
-                            if (goodCoords(newX, width) && goodCoords(newY, height)) {
-                                meanValue += image[newX][newY];
-                                countChisl++;
-                            }
+                    for (int deltaX = -WINDOW_SIZE_CLUSTERS / 2; deltaX <= WINDOW_SIZE_CLUSTERS / 2; deltaX++) {
+                        for (int deltaY = -WINDOW_SIZE_CLUSTERS / 2; deltaY <= WINDOW_SIZE_CLUSTERS / 2; deltaY++) {
+                            int newX = mod(x + deltaX, width);
+                            int newY = mod(y + deltaY, height);
+                            meanValue += image[newX][newY];
+                            countChisl++;
                         }
                     }
                     meanValue /= countChisl;
                     int countZnam = 0;
-                    for (int deltaX = -WINDOW_SIZE / 2; deltaX <= WINDOW_SIZE / 2; deltaX++) {
-                        for (int deltaY = -WINDOW_SIZE / 2; deltaY <= WINDOW_SIZE / 2; deltaY++) {
-                            int newX = x + deltaX;
-                            int newY = y + deltaY;
-                            if (goodCoords(newX, width) && goodCoords(newY, height)) {
-                                dispersion += (image[newX][newY] - meanValue) * (image[newX][newY] - meanValue);
-                                countZnam++;
-                                if (goodCoords(newX + n, width) && goodCoords(newY + m, height)) {
-                                    result[x][y][i] += (image[newX][newY] - meanValue) * (image[newX + n][newY + m] - meanValue);
-                                }
-                                if(i == 0){
-                                    result[x][y][4] += Math.pow((image[newX][newY] - meanValue), 3);
-                                    result[x][y][5] += Math.pow((image[newX][newY] - meanValue), 4);
-                                }
-                            }
+                    for (int deltaX = -WINDOW_SIZE_CLUSTERS / 2; deltaX <= WINDOW_SIZE_CLUSTERS / 2; deltaX++) {
+                        for (int deltaY = -WINDOW_SIZE_CLUSTERS / 2; deltaY <= WINDOW_SIZE_CLUSTERS / 2; deltaY++) {
+                            int newX = mod(x + deltaX, width);
+                            int newY = mod(y + deltaY, height);
+                            dispersion += (image[newX][newY] - meanValue) * (image[newX][newY] - meanValue);
+                            countZnam++;
+                            result[i][x][y] += (image[newX][newY] - meanValue) * (image[mod(newX + n, width)][mod(newY + m, height)] - meanValue);
+                            /*if (i == 0) {
+                                result[dx.length + 1][x][y] += Math.pow((image[newX][newY] - meanValue), 3);
+                                result[dx.length + 2][x][y] += Math.pow((image[newX][newY] - meanValue), 4);
+                            }*/
                         }
                     }
-                    result[x][y][i] *= (countZnam + .0) / (dispersion * countChisl);
-                    if(i == 0){
-                        result[x][y][4] *= (1.0)/Math.pow(Math.sqrt(dispersion), 3);
-                        result[x][y][5] *= (1.0)/Math.pow(Math.sqrt(dispersion), 4);
+                    result[i][x][y] *= (countZnam + .0) / (dispersion * countChisl);
+                    if (Double.isNaN(result[i][x][y])) {
+                        System.out.println("NaN found: i=" + i + " x=" + x + " y=" + y);
                     }
+                    /*if (i == 0) {
+                        result[4][x][y] *= (1.0) / Math.pow(Math.sqrt(dispersion), 3);
+                        result[5][x][y] *= (1.0) / Math.pow(Math.sqrt(dispersion), 4);
+                    }*/
                 }
             }
         }
         return result;
     }
-
 
     private static boolean goodCoords(int x, int width) {
         return x >= 0 && x < width;
@@ -466,15 +605,13 @@ public class Main {
             for (int y = 0; y < height; y++) {
                 int countAll = 0;
                 int countHave = 0;
-                for (int deltaX = -WINDOW_SIZE / 2; deltaX <= WINDOW_SIZE / 2; deltaX++) {
-                    for (int deltaY = -WINDOW_SIZE / 2; deltaY <= WINDOW_SIZE / 2; deltaY++) {
-                        int newX = x + deltaX;
-                        int newY = y + deltaY;
-                        if (goodCoords(newX, width) && goodCoords(newY, height)) {
-                            countAll++;
-                            if (binaryImage[newX][newY] == assigment) {
-                                countHave++;
-                            }
+                for (int deltaX = -WINDOW_SIZE_OPENING / 2; deltaX <= WINDOW_SIZE_OPENING / 2; deltaX++) {
+                    for (int deltaY = -WINDOW_SIZE_OPENING / 2; deltaY <= WINDOW_SIZE_OPENING / 2; deltaY++) {
+                        int newX = mod(x + deltaX, width);
+                        int newY = mod(y + deltaY, height);
+                        countAll++;
+                        if (binaryImage[newX][newY] == assigment) {
+                            countHave++;
                         }
                     }
                 }
@@ -493,13 +630,11 @@ public class Main {
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 if (binaryImage[x][y] == assigment) {
-                    for (int deltaX = -WINDOW_SIZE / 2; deltaX <= WINDOW_SIZE / 2; deltaX++) {
-                        for (int deltaY = -WINDOW_SIZE / 2; deltaY <= WINDOW_SIZE / 2; deltaY++) {
-                            int newX = x + deltaX;
-                            int newY = y + deltaY;
-                            if (goodCoords(newX, width) && goodCoords(newY, height)) {
-                                result[newX][newY] = assigment;
-                            }
+                    for (int deltaX = -WINDOW_SIZE_OPENING / 2; deltaX <= WINDOW_SIZE_OPENING / 2; deltaX++) {
+                        for (int deltaY = -WINDOW_SIZE_OPENING / 2; deltaY <= WINDOW_SIZE_OPENING / 2; deltaY++) {
+                            int newX = mod(x + deltaX, width);
+                            int newY = mod(y + deltaY, height);
+                            result[newX][newY] = assigment;
                         }
                     }
                 }
