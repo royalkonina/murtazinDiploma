@@ -15,16 +15,17 @@ import static utils.Utils.Pair;
 
 public class Main {
 
-    public static final int WINDOW_SIZE_CLUSTERS = 31;
+    public static final int WINDOW_SIZE_CLUSTERS = 9;
     public static final int WINDOW_SIZE_OPENING = 5;
     public static final int MASK_SIZE = 5;
     public static final int NUMBER_OF_CLUSTERS = 2;
     public static final Color[] COLORS = {Color.RED, Color.GREEN};
     private static final int COUNT_IMAGES_TO_GENERATE = 100;
-    private static int[] dx = {0, 1, 1, 1};
-    private static int[] dy = {1, 0, 1, -1};
-    //private static int[] dx = {1, 0};
-    //private static int[] dy = {0, 1};
+    private static final int COUNT_LAWS_MASK = 9;
+    //private static int[] dx = {0, 1, 1, 1};
+    //private static int[] dy = {1, 0, 1, -1};
+    private static int[] dx = {1};
+    private static int[] dy = {1};
     private static int[] dx_bfs = {0, 0, 1, -1};
     private static int[] dy_bfs = {1, -1, 0, 0};
     private static int[] L5 = {1, 4, 6, 4, 1};
@@ -72,29 +73,51 @@ public class Main {
     private static int[][] updateWithLawsMask(int[][] grayImage, int[][] lawsMask, int maskIndex) {
         int width = grayImage.length;
         int height = grayImage[0].length;
-        int[][] result = new int[width][height];
+        int[][] updatedImage = new int[width][height];
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 int meanValue = 0;
-                for (int deltaX = -MASK_SIZE / 2, i = 0; deltaX <= MASK_SIZE / 2; deltaX++, i++) {
-                    for (int deltaY = -MASK_SIZE / 2, j = 0; deltaY <= MASK_SIZE / 2; deltaY++, j++) {
+                updatedImage[x][y] = grayImage[x][y];
+                for (int deltaX = -WINDOW_SIZE_CLUSTERS / 2, i = 0; deltaX <= WINDOW_SIZE_CLUSTERS / 2; deltaX++, i++) {
+                    for (int deltaY = -WINDOW_SIZE_CLUSTERS / 2, j = 0; deltaY <= WINDOW_SIZE_CLUSTERS / 2; deltaY++, j++) {
                         int newX = mod(x + deltaX, width);
                         int newY = mod(y + deltaY, height);
                         meanValue += grayImage[newX][newY];
                     }
                 }
-                meanValue /= MASK_SIZE * MASK_SIZE;
+                meanValue /= WINDOW_SIZE_CLUSTERS * WINDOW_SIZE_CLUSTERS;
+                updatedImage[x][y] -= meanValue;
                 for (int deltaX = -MASK_SIZE / 2, i = 0; deltaX <= MASK_SIZE / 2; deltaX++, i++) {
                     for (int deltaY = -MASK_SIZE / 2, j = 0; deltaY <= MASK_SIZE / 2; deltaY++, j++) {
                         int newX = mod(x + deltaX, width);
                         int newY = mod(y + deltaY, height);
-                        result[x][y] += (grayImage[newX][newY] - meanValue) * lawsMask[i][j];
+                        updatedImage[x][y] += (grayImage[newX][newY] - meanValue) * lawsMask[i][j];
+                        if(maskIndex > 2){
+                            updatedImage[x][y] += (grayImage[newX][newY] - meanValue) * lawsMasks[lawsMasks.length - (maskIndex - 2)][i][j];
+                        }
                     }
                 }
-                result[x][y] += meanValue;
+                //updatedImage[x][y] += meanValue;
                 //result[x][y] = Math.min(Math.max(result[x][y], 0), 255);
             }
         }
+        int[][] result = new int[width][height];
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int deltaX = -MASK_SIZE / 2, i = 0; deltaX <= MASK_SIZE / 2; deltaX++, i++) {
+                    for (int deltaY = -MASK_SIZE / 2, j = 0; deltaY <= MASK_SIZE / 2; deltaY++, j++) {
+                        int newX = mod(x + deltaX, width);
+                        int newY = mod(y + deltaY, height);
+                        result[x][y] += Math.abs(updatedImage[newX][newY]);
+                        if(maskIndex > 2){
+                            result[x][y] /= 2;
+                        }
+                    }
+                }
+            }
+        }
+
         return result;
     }
 
@@ -104,8 +127,27 @@ public class Main {
 
     private static void initLawsMasks() {
         int[][] lawsVectors = {L5, E5, S5, R5};
-        lawsMasks = new int[lawsVectors.length * lawsVectors.length][L5.length][L5.length];
-        dividersLawsMasks = new int[lawsVectors.length * lawsVectors.length];
+        lawsMasks = new int[lawsVectors.length * lawsVectors.length - 1][L5.length][L5.length];
+        lawsMasks[0] = mult(S5, S5);
+        lawsMasks[1] = mult(E5, E5);
+        lawsMasks[2] = mult(R5, R5);
+
+        lawsMasks[3] = mult(S5, L5);
+        lawsMasks[4] = mult(S5, E5);
+        lawsMasks[5] = mult(S5, R5);
+
+        lawsMasks[6] = mult(R5, L5);
+        lawsMasks[7] = mult(E5, L5);
+        lawsMasks[8] = mult(E5, R5);
+
+        lawsMasks[9] = mult(R5, E5);
+        lawsMasks[10] = mult(L5, E5);
+        lawsMasks[11] = mult(L5, R5);
+
+        lawsMasks[12] = mult(R5, S5);
+        lawsMasks[13] = mult(E5, S5);
+        lawsMasks[14] = mult(L5, S5);
+        /*dividersLawsMasks = new int[lawsVectors.length * lawsVectors.length];
         for (int i = 0; i < lawsVectors.length; i++) {
             for (int j = 0; j < lawsVectors.length; j++) {
                 int index = i * lawsVectors.length + j;
@@ -116,7 +158,8 @@ public class Main {
                     }
                 }
             }
-        }
+        }*/
+
     }
 
     private static int[][] mult(int[] first, int[] second) {
@@ -361,8 +404,12 @@ public class Main {
 
     private static int[] getCountOfAssigments(int[][] binaryImage) {
         int[] counts = new int[2];
+        int width = binaryImage.length;
+        int height = binaryImage[0].length;
+        int temp = Generator.OFFSET;
         for (int x = 0; x < binaryImage.length; x++) {
             for (int y = 0; y < binaryImage[0].length; y++) {
+                if((x < temp || x > width - temp) && (y < temp || y > height - temp))
                 counts[binaryImage[x][y]]++;
             }
         }
@@ -402,7 +449,7 @@ public class Main {
     }
 
     private static double[][][] getLawsMatrix(int[][] grayImage) {
-        int[] indexes = {3, 7};
+        int[] indexes = {0};
         int m = indexes.length;
         int width = grayImage.length;
         int height = grayImage[0].length;
@@ -572,6 +619,7 @@ public class Main {
                             int newY = mod(y + deltaY, height);
                             dispersion += (image[newX][newY] - meanValue) * (image[newX][newY] - meanValue);
                             countZnam++;
+                            // result[i][x][y] += Math.pow((image[newX][newY] - meanValue), 4);
                             result[i][x][y] += (image[newX][newY] - meanValue) * (image[mod(newX + n, width)][mod(newY + m, height)] - meanValue);
                             /*if (i == 0) {
                                 result[dx.length + 1][x][y] += Math.pow((image[newX][newY] - meanValue), 3);
@@ -580,6 +628,7 @@ public class Main {
                         }
                     }
                     result[i][x][y] *= (countZnam + .0) / (dispersion * countChisl);
+                    //result[i][x][y] *= (1.0) / Math.pow(Math.sqrt(dispersion), 4);
                     if (Double.isNaN(result[i][x][y])) {
                         System.out.println("NaN found: i=" + i + " x=" + x + " y=" + y);
                     }
